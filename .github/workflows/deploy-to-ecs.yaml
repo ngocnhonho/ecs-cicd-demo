@@ -112,14 +112,14 @@ jobs:
         with:
           task-definition-family: ${{ env.ECS_TASK_DEFINITION }}
           container-name: ${{ env.BACKEND_CONTAINER_NAME }}
-          images: ${{vars.DOCKERHUB_USERNAME}}/${{env.BACKEND_IMAGE_NAME}}
+          image: ${{vars.DOCKERHUB_USERNAME}}/${{env.BACKEND_IMAGE_NAME}}
       - name: Modify Amazon ECS task definition with second container for app frontend
         id: task-def-app-frontend
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
           task-definition: ${{ steps.task-def.outputs.task-definition }}
           container-name: ${{ env.FRONTEND_CONTAINER_NAME }}
-          images: ${{vars.DOCKERHUB_USERNAME}}/${{env.FRONTEND_IMAGE_NAME}}
+          image: ${{vars.DOCKERHUB_USERNAME}}/${{env.FRONTEND_IMAGE_NAME}}
       - name: Deploy Amazon ECS task definition
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
