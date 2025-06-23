@@ -52,6 +52,7 @@ jobs:
           node-version: 22
       - name: Build project
         run: npm run build
+        working-directory: ./frontend
       - name: Upload dist artifact
         uses: actions/upload-pages-artifact@v3 # or specific "vX.X.X" version tag for this action
         with:
