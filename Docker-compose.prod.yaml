@@ -1,0 +1,51 @@
+services:
+  # mongodb:
+  #   image: 'mongo'
+  #   volumes:
+  #     - mongodata:/data/db
+  #   env_file:
+  #     - ./env/mongo.env
+  #   networks:
+  #     - mongodb-net
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    image: prod-backend-image
+    volumes:
+      - ./backend:/app
+      - logs:/app/logs
+      - /app/node_modules
+    ports:
+      - '8080:8080'
+    env_file:
+      - ./env/backend.prod.env
+    networks:
+      # - mongodb-net
+      - backend-net
+
+  frontend:
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      # args:
+      #   BACKEND_API_BASE_URL: http://localhost:8080
+    image: prod-frontend-image
+    ports:
+      - '80:80'
+    volumes:
+      - ./frontend/src:/app/src
+    stdin_open: true
+    tty: true
+    networks:
+      - backend-net
+    depends_on:
+      - backend
+
+volumes:
+  mongodata:
+  logs:
+networks:
+  # mongodb-net:
+  backend-net:
+  

@@ -1,0 +1,62 @@
+services:
+  mongodb:
+    image: 'mongo'
+    volumes:
+      - mongodata:/data/db
+    env_file:
+      - ./env/mongo.env
+    networks:
+      - mongodb-net
+  backend:
+    build: ./backend
+    image: node-backend-image
+    volumes:
+      - ./backend:/app
+      - logs:/app/logs
+      - /app/node_modules
+    ports:
+      - '8080:8080'
+    env_file:
+      - ./env/backend.env
+    networks:
+      - mongodb-net
+      - backend-net
+    depends_on:
+      - mongodb
+    develop:
+      watch:
+        - path: ./backend
+          action: sync 
+          target: /app
+          ignore:
+            - node_modules
+  frontend:
+    build: ./frontend
+    image: node-frontend-image
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./frontend/src:/app/src
+    stdin_open: true
+    tty: true
+    networks:
+      - backend-net
+    depends_on:
+      - backend
+    # develop:
+    #   watch:
+    #     - path: ./frontend
+    #       action: sync 
+    #       target: /app
+    #       ignore:
+    #         - node_modules 
+    #         - build  
+
+
+volumes:
+  mongodata:
+  logs:
+networks:
+  mongodb-net:
+  backend-net:
+  
