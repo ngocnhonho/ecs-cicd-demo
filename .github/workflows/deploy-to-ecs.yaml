@@ -51,6 +51,7 @@ jobs:
         with: 
           node-version: 22
       - name: Install dependencies for frontend
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
           cd frontend
           npm install
