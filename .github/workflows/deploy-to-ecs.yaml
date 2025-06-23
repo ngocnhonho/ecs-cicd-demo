@@ -50,14 +50,19 @@ jobs:
         uses: ./.github/actions/setupnode
         with: 
           node-version: 22
+      - name: Install dependencies for frontend
+        run: |
+          cd frontend
+          npm install
       - name: Build project
-        run: npm run build
-        working-directory: ./frontend
+        run: |
+          cd frontend
+          npm run build
       - name: Upload dist artifact
         uses: actions/upload-pages-artifact@v3 # or specific "vX.X.X" version tag for this action
         with:
           name: app-build
-          path: build/       
+          path: frontend/build/       
       - name: Details image
         id: meta
         uses: docker/metadata-action@v5
