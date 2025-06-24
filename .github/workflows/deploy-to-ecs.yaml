@@ -17,6 +17,8 @@ env:
   FRONTEND_CONTAINER_NAME: nodefrontend
   ECS_SERVICE: AppReact-Test-Services
   ECS_CLUSTER: AppReact-Test-Cluster
+  ECS_EXECUTION_ROLE: 'arn:aws:iam::590183692627:role/ecsTaskExecutionRole'
+  CONTAINER_PORT: 8080
 jobs:
   Build-image-backend:
     runs-on: ubuntu-latest
@@ -106,25 +108,88 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: Fill in the new image ID for node first in the Amazon ECS task definition
-        id: task-def
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition-family: ${{ env.ECS_TASK_DEFINITION }}
-          container-name: ${{ env.BACKEND_CONTAINER_NAME }}
-          image: ${{vars.DOCKERHUB_USERNAME}}/${{env.BACKEND_IMAGE_NAME}}
-      - name: Modify Amazon ECS task definition with second container for app frontend
-        id: task-def-app-frontend
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: ${{ steps.task-def.outputs.task-definition }}
-          container-name: ${{ env.FRONTEND_CONTAINER_NAME }}
-          image: ${{vars.DOCKERHUB_USERNAME}}/${{env.FRONTEND_IMAGE_NAME}}
-      - name: Deploy Amazon ECS task definition
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
-        with:
-          task-definition: ${{ steps.task-def-app-frontend.outputs.task-definition }}
-          service: ${{ env.ECS_SERVICE }}
-          cluster: ${{ env.ECS_CLUSTER }}
-          wait-for-service-stability: true
+      - name: Verify AWS credentials
+        run: |
+          aws sts get-caller-identity
+          aws ecs list-task-definitions --family-prefix ${{ env.ECS_TASK_DEFINITION }}
+
+      # - name: Fill in the new image ID for node first in the Amazon ECS task definition
+      #   id: task-def
+      #   uses: aws-actions/amazon-ecs-render-task-definition@v1
+      #   with:
+      #     task-definition-family: ${{ env.ECS_TASK_DEFINITION }}
+      #     container-name: ${{ env.BACKEND_CONTAINER_NAME }}
+      #     image: ${{vars.DOCKERHUB_USERNAME}}/${{env.BACKEND_IMAGE_NAME}}
+      # - name: Modify Amazon ECS task definition with second container for app frontend
+      #   id: task-def-app-frontend
+      #   uses: aws-actions/amazon-ecs-render-task-definition@v1
+      #   with:
+      #     task-definition: ${{ steps.task-def.outputs.task-definition }}
+      #     container-name: ${{ env.FRONTEND_CONTAINER_NAME }}
+      #     image: ${{vars.DOCKERHUB_USERNAME}}/${{env.FRONTEND_IMAGE_NAME}}
+
+      - name: Create or check ECS task definition
+        id: ecs-task
+        env:
+          TASK_NAME: ${{ env.ECS_TASK_DEFINITION }}
+          IMAGE_URI: ${{vars.DOCKERHUB_USERNAME}}/${{env.BACKEND_IMAGE_NAME}}
+          LOG_GROUP: "/ecs/${{ env.ECS_TASK_DEFINITION }}"
+          AWS_REGION: ${{ env.AWS_REGION }}
+        run: |
+          # Tạo CloudWatch Log Group nếu chưa tồn tại
+          if ! aws logs describe-log-groups --log-group-name-prefix $LOG_GROUP --query 'logGroups[].logGroupName' --output text | grep -q $LOG_GROUP; then
+            aws logs create-log-group --log-group-name $LOG_GROUP
+            aws logs put-retention-policy --log-group-name $LOG_GROUP --retention-in-days 30
+            echo "Created new CloudWatch Log Group with 30-day retention"
+          fi
+
+          # Kiểm tra task definition đã tồn tại chưa
+          if aws ecs describe-task-definition --task-definition $TASK_NAME &> /dev/null; then
+            echo "Task definition exists"
+            echo "is_new=false" >> $GITHUB_OUTPUT
+          else
+            echo "Creating new task definition..."
+            aws ecs register-task-definition \
+              --family $TASK_NAME \
+              --network-mode awsvpc \
+              --requires-compatibilities FARGATE \
+              --cpu 256 \
+              --memory 512 \
+              --execution-role-arn ${{ env.ECS_EXECUTION_ROLE }} \
+              --container-definitions '[{
+                "name": "${{ env.BACKEND_CONTAINER_NAME }}",
+                "image": "'$IMAGE_URI'",
+                "essential": true,
+                "portMappings": [
+                  {
+                    "containerPort": 8080,
+                    "hostPort": 8080,
+                    "protocol": "tcp"
+                  }],
+                  "environment": [
+                    {"name": "MONGOURI", "value": "${{ secrets.MONGODB_HOST }}"}
+                  ],
+                  "logConfiguration": {
+                    "logDriver": "awslogs",
+                    "secretOptions": [],
+                    "options": {
+                      "awslogs-group": "'$LOG_GROUP'",
+                      "awslogs-region": "'$AWS_REGION'",
+                      "awslogs-stream-prefix": "ecs",
+                      "awslogs-datetime-format": "%Y-%m-%d %H:%M:%S",
+                      "awslogs-multiline-pattern": "^\\[\\d{4}-\\d{2}-\\d{2}",
+                      "awslogs-create-group": "false"
+                    }
+                  }
+              }]'
+            echo "is_new=true" >> $GITHUB_OUTPUT
+          fi
+
+      # - name: Deploy Amazon ECS task definition
+      #   uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+      #   with:
+      #     task-definition: ${{ steps.task-def-app-frontend.outputs.task-definition }}
+      #     service: ${{ env.ECS_SERVICE }}
+      #     cluster: ${{ env.ECS_CLUSTER }}
+      #     wait-for-service-stability: true
         
