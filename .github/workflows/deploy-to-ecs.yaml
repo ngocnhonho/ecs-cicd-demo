@@ -177,8 +177,7 @@ jobs:
                       "awslogs-region": "'$AWS_REGION'",
                       "awslogs-stream-prefix": "ecs",
                       "awslogs-datetime-format": "%Y-%m-%d %H:%M:%S",
-                      "awslogs-multiline-pattern": "^\\[\\d{4}-\\d{2}-\\d{2}",
-                      "awslogs-create-group": "false"
+                      "awslogs-multiline-pattern": "^\\[\\d{4}-\\d{2}-\\d{2}"                 
                     }
                   }
               }]'
