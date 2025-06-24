@@ -132,7 +132,8 @@ jobs:
         id: ecs-task
         env:
           TASK_NAME: ${{ env.ECS_TASK_DEFINITION }}
-          IMAGE_URI: ${{vars.DOCKERHUB_USERNAME}}/${{env.BACKEND_IMAGE_NAME}}
+          IMAGE_URI_BACKEND: ${{vars.DOCKERHUB_USERNAME}}/${{env.BACKEND_IMAGE_NAME}}
+          IMAGE_URI_FRONTEND: ${{vars.DOCKERHUB_USERNAME}}/${{env.FRONTEND_IMAGE_NAME}}
           LOG_GROUP: "/ecs/${{ env.ECS_TASK_DEFINITION }}"
           AWS_REGION: ${{ env.AWS_REGION }}
         run: |
@@ -153,19 +154,21 @@ jobs:
               --family $TASK_NAME \
               --network-mode awsvpc \
               --requires-compatibilities FARGATE \
-              --cpu 256 \
-              --memory 512 \
+              --cpu 512 \
+              --memory 1024 \
               --task-role-arn ${{ env.ECS_EXECUTION_ROLE }} \
               --execution-role-arn ${{ env.ECS_EXECUTION_ROLE }} \
               --container-definitions '[{
                 "name": "${{ env.BACKEND_CONTAINER_NAME }}",
-                "image": "'$IMAGE_URI'",
+                "image": "'$IMAGE_URI_BACKEND'",
                 "essential": true,
                 "portMappings": [
                   {
                     "containerPort": 8080,
                     "hostPort": 8080,
-                    "protocol": "tcp"
+                    "protocol": "tcp",
+                    "appProtocol": "http" 
+                    
                   }],
                   "environment": [
                     {"name": "MONGOURI", "value": "${{ secrets.MONGODB_HOST }}"}
@@ -181,7 +184,18 @@ jobs:
                       "awslogs-multiline-pattern": "^\\[\\d{4}-\\d{2}-\\d{2}"                 
                     }
                   }
-              }]'
+                },
+                "name": "${{ env.FRONTEND_CONTAINER_NAME }}",
+                "image": "'$IMAGE_URI_FRONTEND'",
+                "essential": true,
+                "portMappings": [
+                  {
+                    "containerPort": 80,
+                    "hostPort": 80,
+                    "protocol": "tcp",
+                    "appProtocol": "http" 
+                  }],
+              ]'
             echo "is_new=true" >> $GITHUB_OUTPUT
           fi
 
@@ -207,6 +221,25 @@ jobs:
           
           echo "subnets=$SUBNETS" >> $GITHUB_OUTPUT
           echo "security_group=$SG" >> $GITHUB_OUTPUT    
+      - name: Create or Update ECS Service
+        run: |
+          aws ecs create-service \
+            --cluster $ECS_CLUSTER \
+            --service-name $ECS_SERVICE \
+            --task-definition ${{ env.ECS_TASK_DEFINITION }} \
+            --desired-count 1 \
+            --launch-type FARGATE \
+            --capacity-provider-strategy \
+              '[{"capacityProvider":"FARGATE","weight":1,"base":1}]' \
+            --network-configuration \
+              '{
+                "awsvpcConfiguration": {
+                  "subnets": ${{ steps.vpc-config.outputs.subnets }},
+                  "securityGroups": ["${{ steps.vpc-config.outputs.security_group }}"],
+                  "assignPublicIp": "ENABLED"
+                }
+              }' \
+            --enable-execute-command
       # - name: Deploy Amazon ECS task definition
       #   uses: aws-actions/amazon-ecs-deploy-task-definition@v2
       #   with:
