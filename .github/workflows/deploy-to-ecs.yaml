@@ -185,6 +185,28 @@ jobs:
             echo "is_new=true" >> $GITHUB_OUTPUT
           fi
 
+      - name: Create ECS Cluster if not exists
+        id: create-cluster
+        run: |
+          if ! aws ecs describe-clusters --clusters $ECS_CLUSTER --query 'clusters[0].clusterName' --output text 2>/dev/null; then
+            aws ecs create-cluster \
+              --cluster-name $ECS_CLUSTER \
+              --capacity-providers FARGATE FARGATE_SPOT \
+              --default-capacity-provider-strategy \
+                '[{"capacityProvider":"FARGATE","weight":1},{"capacityProvider":"FARGATE_SPOT","weight":1}]'
+            echo "Cluster created"
+          else
+            echo "Cluster already exists"
+          fi
+
+      - name: Get VPC Configuration
+        id: vpc-config
+        run: |
+          SUBNETS=$(aws ec2 describe-subnets --filters "Name=tag:Name,Values=*public*" --query 'Subnets[*].SubnetId' --output json)
+          SG=$(aws ec2 describe-security-groups --filters "Name=group-name,Values=default" --query 'SecurityGroups[0].GroupId' --output text)
+          
+          echo "subnets=$SUBNETS" >> $GITHUB_OUTPUT
+          echo "security_group=$SG" >> $GITHUB_OUTPUT    
       # - name: Deploy Amazon ECS task definition
       #   uses: aws-actions/amazon-ecs-deploy-task-definition@v2
       #   with:
