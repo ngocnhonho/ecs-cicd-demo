@@ -278,8 +278,8 @@ jobs:
       - name: Create or Update ECS Service
         run: |
           aws ecs create-service \
-            --cluster $ECS_CLUSTER_NAME \
-            --service-name $ECS_SERVICE_NAME  \
+            --cluster "${{ env.ECS_CLUSTER_NAME }}" \
+            --service-name "${{ env.ECS_SERVICE_NAME }}" \
             --task-definition ${{ env.ECS_TASK_DEFINITION }} \
             --desired-count 1 \
             --launch-type FARGATE \
