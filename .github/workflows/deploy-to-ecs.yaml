@@ -2,11 +2,11 @@ name: Build image and deploy to ECS on AWS
 on:
   push:
     branches:
-      # - main
-      - feature/dev
+      - main
+      # - feature/dev
     paths-ignore:
       - README.md
-      # - '.github/workflows/*'
+      - '.github/workflows/*'
   workflow_dispatch:
 
 env:
