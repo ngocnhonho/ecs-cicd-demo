@@ -253,43 +253,27 @@ jobs:
           echo "Public Subnets: $PUBLIC_SUBNETS"
           echo "Default Security Group: $DEFAULT_SG"
 
-      - name: Ensure ECS Cluster Active
+      - name: Create an ECS Cluster
         id: ensure-cluster
         run: |
-          # 1. Kiểm tra trạng thái cluster
-          CLUSTER_INFO=$(aws ecs describe-clusters \
-            --clusters ${{ env.ECS_CLUSTER_NAME }} \
-            --query 'clusters[0]' \
-            --output json 2>/dev/null || echo '{"status":"NOT_FOUND"}')
-          
-          CLUSTER_STATUS=$(echo $CLUSTER_INFO | jq -r '.status')
-          
-          # 2. Xử lý các trường hợp
-          case $CLUSTER_STATUS in
-            "ACTIVE")
-              echo "Cluster đã tồn tại và đang ACTIVE"
-              ;;
-            "INACTIVE")
-              echo "::warning::Cluster đang INACTIVE, tiến hành xóa..."
-              aws ecs delete-cluster \
-                --cluster ${{ env.ECS_CLUSTER_NAME }} \
-                --no-cli-pager
-              ;;
-            "NOT_FOUND"|*)
-              echo "Tạo cluster mới..."
-              aws ecs create-cluster \
-                --cluster-name ${{ env.ECS_CLUSTER_NAME }} \
-                --settings name=containerInsights,value=enabled \
-                --capacity-providers FARGATE \
-                --default-capacity-provider-strategy '[{"capacityProvider":"FARGATE","weight":1}]'
-              ;;
-          esac
-          
-          # 3. Xuất thông tin cluster (không kiểm tra trạng thái)
-          echo "cluster_arn=$(aws ecs describe-clusters \
-            --clusters ${{ env.ECS_CLUSTER_NAME }} \
+          echo "🔧 Tiến hành tạo ECS Cluster .."
+
+          # Tạo cluster nếu chưa có
+          aws ecs create-cluster \
+            --cluster-name "${{ env.ECS_CLUSTER_NAME }}" \
+            # --settings name=containerInsights,value=enabled \
+            --capacity-providers FARGATE \
+            --default-capacity-provider-strategy '[{"capacityProvider":"FARGATE","weight":1}]' || true
+
+          # Lấy ARN của cluster và xuất ra output
+          CLUSTER_ARN=$(aws ecs describe-clusters \
+            --clusters "${{ env.ECS_CLUSTER_NAME }}" \
             --query 'clusters[0].clusterArn' \
-            --output text 2>/dev/null || echo '')" >> $GITHUB_OUTPUT
+            --output text 2>/dev/null || echo '')
+
+          echo "cluster_arn=$CLUSTER_ARN" >> $GITHUB_OUTPUT
+
+
 
       - name: Create or Update ECS Service
         run: |
