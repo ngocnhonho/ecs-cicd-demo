@@ -132,8 +132,8 @@ jobs:
         id: ecs-task
         env:
           TASK_NAME: ${{ env.ECS_TASK_DEFINITION }}
-          IMAGE_URI_BACKEND: ${{vars.DOCKERHUB_USERNAME}}/${{env.BACKEND_IMAGE_NAME}}
-          IMAGE_URI_FRONTEND: ${{vars.DOCKERHUB_USERNAME}}/${{env.FRONTEND_IMAGE_NAME}}
+          IMAGE_URI_BACKEND: "${{vars.DOCKERHUB_USERNAME}}/${{env.BACKEND_IMAGE_NAME}}:${{ github.sha }}"
+          IMAGE_URI_FRONTEND: "${{vars.DOCKERHUB_USERNAME}}/${{env.FRONTEND_IMAGE_NAME}}:${{ github.sha }}"
           LOG_GROUP: "/ecs/${{ env.ECS_TASK_DEFINITION }}"
           AWS_REGION: ${{ env.AWS_REGION }}
         run: |
@@ -150,45 +150,43 @@ jobs:
             echo "is_new=false" >> $GITHUB_OUTPUT
           else
             echo "Creating new task definition..."
-            aws ecs register-task-definition \
-              --family $TASK_NAME \
-              --network-mode awsvpc \
-              --requires-compatibilities FARGATE \
-              --cpu 512 \
-              --memory 1024 \
-              --task-role-arn ${{ env.ECS_EXECUTION_ROLE }} \
-              --execution-role-arn ${{ env.ECS_EXECUTION_ROLE }} \
-              --container-definitions '[
+            
+            # Tạo file JSON tạm để tránh lỗi parsing
+            cat <<EOF > task-definition.json
+            [
               {
                 "name": "${{ env.BACKEND_CONTAINER_NAME }}",
-                "image": "'$IMAGE_URI_BACKEND'",
+                "image": "$IMAGE_URI_BACKEND",
                 "essential": true,
                 "portMappings": [
                   {
                     "containerPort": 8080,
-                    "hostPort": 8080,
+                    "hostPort": "8080,
                     "protocol": "tcp",
                     "appProtocol": "http",
-                    "name": "backend-api"   
-                  }],
+                    "name": "backend-api"
+                  }
+                ],
                 "environment": [
-                  {"name": "MONGOURI", "value": "${{ secrets.MONGODB_HOST }}"}
+                  {
+                    "name": "MONGOURI",
+                    "value": "${{ secrets.MONGODB_HOST }}"
+                  }
                 ],
                 "logConfiguration": {
                   "logDriver": "awslogs",
-                  "secretOptions": [],
                   "options": {
-                    "awslogs-group": "'$LOG_GROUP'",
-                    "awslogs-region": "'$AWS_REGION'",
+                    "awslogs-group": "$LOG_GROUP",
+                    "awslogs-region": "$AWS_REGION",
                     "awslogs-stream-prefix": "backend-api",
                     "awslogs-datetime-format": "%Y-%m-%d %H:%M:%S",
-                    "awslogs-multiline-pattern": "^\\[\\d{4}-\\d{2}-\\d{2}"                 
+                    "awslogs-multiline-pattern": "^\\\\[\\\\d{4}-\\\\d{2}-\\\\d{2}"
                   }
                 }
               },
               {
                 "name": "${{ env.FRONTEND_CONTAINER_NAME }}",
-                "image": "'$IMAGE_URI_FRONTEND'",
+                "image": "$IMAGE_URI_FRONTEND",
                 "essential": false,
                 "portMappings": [
                   {
@@ -196,11 +194,24 @@ jobs:
                     "hostPort": "80,
                     "protocol": "tcp",
                     "appProtocol": "http",
-                    "name": "frontend" 
+                    "name": "frontend"
                   }
                 ]
               }
-              ]'
+            ]
+            EOF
+
+            # Đăng ký task definition
+            aws ecs register-task-definition \
+              --family $TASK_NAME \
+              --network-mode awsvpc \
+              --requires-compatibilities FARGATE \
+              --cpu 512 \
+              --memory 1024 \
+              --task-role-arn ${{ env.ECS_TASK_ROLE }} \
+              --execution-role-arn ${{ env.ECS_EXECUTION_ROLE }} \
+              --container-definitions file://task-definition.json
+
             echo "is_new=true" >> $GITHUB_OUTPUT
           fi
 
