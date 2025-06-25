@@ -5,7 +5,7 @@ on:
       - main
     paths-ignore:
       - README.md
-      # - '.github/workflows/*'
+      - '.github/workflows/*'
   workflow_dispatch:
 
 env:
@@ -225,14 +225,34 @@ jobs:
             echo "Task definition registered successfully"
           fi
 
-      - name: Get VPC Configuration
+      - name: Get Default VPC Configuration
         id: vpc-config
         run: |
-          SUBNETS=$(aws ec2 describe-subnets --filters "Name=tag:Name,Values=*public*" --query 'Subnets[*].SubnetId' --output json)
-          SG=$(aws ec2 describe-security-groups --filters "Name=group-name,Values=default" --query 'SecurityGroups[0].GroupId' --output text)
+          # Lấy ID VPC mặc định
+          DEFAULT_VPC_ID=$(aws ec2 describe-vpcs --filters "Name=isDefault,Values=true" --query "Vpcs[0].VpcId" --output text)
           
-          echo "subnets=$SUBNETS" >> $GITHUB_OUTPUT
-          echo "security_group=$SG" >> $GITHUB_OUTPUT    
+          # Lấy danh sách subnet public trong VPC mặc định
+          PUBLIC_SUBNETS=$(aws ec2 describe-subnets \
+            --filters "Name=vpc-id,Values=$DEFAULT_VPC_ID" "Name=map-public-ip-on-launch,Values=true" \
+            --query "Subnets[*].SubnetId" \
+            --output json)
+          
+          # Lấy security group mặc định
+          DEFAULT_SG=$(aws ec2 describe-security-groups \
+            --filters "Name=vpc-id,Values=$DEFAULT_VPC_ID" "Name=group-name,Values=default" \
+            --query "SecurityGroups[0].GroupId" \
+            --output text)
+          
+          # Xuất biến cho các bước tiếp theo
+          echo "vpc_id=$DEFAULT_VPC_ID" >> $GITHUB_OUTPUT
+          echo "subnets=$PUBLIC_SUBNETS" >> $GITHUB_OUTPUT
+          echo "security_group=$DEFAULT_SG" >> $GITHUB_OUTPUT
+          
+          # In thông tin để debug
+          echo "Default VPC ID: $DEFAULT_VPC_ID"
+          echo "Public Subnets: $PUBLIC_SUBNETS"
+          echo "Default Security Group: $DEFAULT_SG"
+
       - name: Create or Update ECS Service
         run: |
           aws ecs create-service \
