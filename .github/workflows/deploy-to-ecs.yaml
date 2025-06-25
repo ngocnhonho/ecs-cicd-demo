@@ -283,8 +283,6 @@ jobs:
             --task-definition ${{ env.ECS_TASK_DEFINITION }} \
             --desired-count 1 \
             --launch-type FARGATE \
-            --capacity-provider-strategy \
-              '[{"capacityProvider":"FARGATE","weight":1,"base":1}]' \
             --network-configuration \
               '{
                 "awsvpcConfiguration": {
