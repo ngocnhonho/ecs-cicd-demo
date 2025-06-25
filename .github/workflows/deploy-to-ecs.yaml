@@ -18,7 +18,6 @@ env:
   ECS_SERVICE_NAME: AppReact-Test-Services
   ECS_CLUSTER_NAME: AppReact-Test-Cluster
   ECS_EXECUTION_ROLE: 'arn:aws:iam::590183692627:role/ecsTaskExecutionRole'
-  CONTAINER_PORT: 8080
 jobs:
   Build-image-backend:
     runs-on: ubuntu-latest
@@ -112,22 +111,6 @@ jobs:
         run: |
           aws sts get-caller-identity
           aws ecs list-task-definitions --family-prefix ${{ env.ECS_TASK_DEFINITION }}
-
-      # - name: Fill in the new image ID for node first in the Amazon ECS task definition
-      #   id: task-def
-      #   uses: aws-actions/amazon-ecs-render-task-definition@v1
-      #   with:
-      #     task-definition-family: ${{ env.ECS_TASK_DEFINITION }}
-      #     container-name: ${{ env.BACKEND_CONTAINER_NAME }}
-      #     image: ${{vars.DOCKERHUB_USERNAME}}/${{env.BACKEND_IMAGE_NAME}}
-      # - name: Modify Amazon ECS task definition with second container for app frontend
-      #   id: task-def-app-frontend
-      #   uses: aws-actions/amazon-ecs-render-task-definition@v1
-      #   with:
-      #     task-definition: ${{ steps.task-def.outputs.task-definition }}
-      #     container-name: ${{ env.FRONTEND_CONTAINER_NAME }}
-      #     image: ${{vars.DOCKERHUB_USERNAME}}/${{env.FRONTEND_IMAGE_NAME}}
-
       - name: Create or check ECS task definition
         id: ecs-task
         env:
@@ -256,7 +239,7 @@ jobs:
       - name: Create an ECS Cluster
         id: ensure-cluster
         run: |
-          echo "🔧 Tiến hành tạo ECS Cluster .."
+          echo "Tiến hành tạo ECS Cluster .."
 
           # Tạo cluster nếu chưa có
           aws ecs create-cluster \
@@ -272,8 +255,6 @@ jobs:
             --output text 2>/dev/null || echo '')
 
           echo "cluster_arn=$CLUSTER_ARN" >> $GITHUB_OUTPUT
-
-
 
       - name: Create or Update ECS Service
         run: |
@@ -291,12 +272,4 @@ jobs:
                   "assignPublicIp": "ENABLED"
                 }
               }' \
-            --enable-execute-command
-      # - name: Deploy Amazon ECS task definition
-      #   uses: aws-actions/amazon-ecs-deploy-task-definition@v2
-      #   with:
-      #     task-definition: ${{ steps.task-def-app-frontend.outputs.task-definition }}
-      #     service: ${{ env.ECS_SERVICE }}
-      #     cluster: ${{ env.ECS_CLUSTER }}
-      #     wait-for-service-stability: true
-        
+            --enable-execute-command  
