@@ -134,6 +134,8 @@ jobs:
           TASK_NAME: ${{ env.ECS_TASK_DEFINITION }}
           IMAGE_URI_BACKEND: ${{vars.DOCKERHUB_USERNAME}}/${{env.BACKEND_IMAGE_NAME}}
           IMAGE_URI_FRONTEND: ${{vars.DOCKERHUB_USERNAME}}/${{env.FRONTEND_IMAGE_NAME}}
+          PORT_API: 8080
+          PORT_WEBSERVER: 80
           LOG_GROUP: "/ecs/${{ env.ECS_TASK_DEFINITION }}"
           AWS_REGION: ${{ env.AWS_REGION }}
         run: |
@@ -158,43 +160,48 @@ jobs:
               --memory 1024 \
               --task-role-arn ${{ env.ECS_EXECUTION_ROLE }} \
               --execution-role-arn ${{ env.ECS_EXECUTION_ROLE }} \
-              --container-definitions '[{
+              --container-definitions '[
+              {
                 "name": "${{ env.BACKEND_CONTAINER_NAME }}",
                 "image": "'$IMAGE_URI_BACKEND'",
                 "essential": true,
                 "portMappings": [
                   {
-                    "containerPort": 8080,
-                    "hostPort": 8080,
+                    "containerPort": "${{ env.PORT_API }}",
+                    "hostPort": "${{ env.PORT_API }}",
                     "protocol": "tcp",
-                    "appProtocol": "http" 
-                    
+                    "appProtocol": "http",
+                    "name": "backend-api"   
                   }],
-                  "environment": [
-                    {"name": "MONGOURI", "value": "${{ secrets.MONGODB_HOST }}"}
-                  ],
-                  "logConfiguration": {
-                    "logDriver": "awslogs",
-                    "secretOptions": [],
-                    "options": {
-                      "awslogs-group": "'$LOG_GROUP'",
-                      "awslogs-region": "'$AWS_REGION'",
-                      "awslogs-stream-prefix": "ecs",
-                      "awslogs-datetime-format": "%Y-%m-%d %H:%M:%S",
-                      "awslogs-multiline-pattern": "^\\[\\d{4}-\\d{2}-\\d{2}"                 
-                    }
+                "environment": [
+                  {"name": "MONGOURI", "value": "${{ secrets.MONGODB_HOST }}"}
+                ],
+                "logConfiguration": {
+                  "logDriver": "awslogs",
+                  "secretOptions": [],
+                  "options": {
+                    "awslogs-group": "'$LOG_GROUP'",
+                    "awslogs-region": "'$AWS_REGION'",
+                    "awslogs-stream-prefix": "backend-api",
+                    "awslogs-datetime-format": "%Y-%m-%d %H:%M:%S",
+                    "awslogs-multiline-pattern": "^\\[\\d{4}-\\d{2}-\\d{2}"                 
                   }
-                },
+                }
+              },
+              {
                 "name": "${{ env.FRONTEND_CONTAINER_NAME }}",
                 "image": "'$IMAGE_URI_FRONTEND'",
-                "essential": true,
+                "essential": false,
                 "portMappings": [
                   {
-                    "containerPort": 80,
-                    "hostPort": 80,
+                    "containerPort": "${{ env.PORT_WEBSERVER }}",
+                    "hostPort": "${{ env.PORT_WEBSERVER }}",
                     "protocol": "tcp",
-                    "appProtocol": "http" 
-                  }],
+                    "appProtocol": "http",
+                    "name": "frontend" 
+                  }
+                ]
+              }
               ]'
             echo "is_new=true" >> $GITHUB_OUTPUT
           fi
