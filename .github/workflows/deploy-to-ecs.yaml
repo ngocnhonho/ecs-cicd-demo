@@ -157,58 +157,59 @@ jobs:
           else
             echo "Creating new task definition..."
             
-            # Tạo file JSON với cú pháp heredoc chính xác
-            cat > task-definition.json <<'EOF'
-            [
-              {
-                "name": "${{ env.BACKEND_CONTAINER_NAME }}",
-                "image": "'"$IMAGE_URI_BACKEND"'",
-                "essential": true,
-                "portMappings": [
-                  {
-                    "containerPort": 8080,
-                    "hostPort": "8080,
-                    "protocol": "tcp",
-                    "appProtocol": "http",
-                    "name": "backend-api"
-                  }
-                ],
-                "environment": [
-                  {
-                    "name": "MONGOURI",
-                    "value": "'"${{ secrets.MONGODB_HOST }}"'"
-                  }
-                ],
-                "logConfiguration": {
-                  "logDriver": "awslogs",
-                  "options": {
-                    "awslogs-group": "'"$LOG_GROUP"'",
-                    "awslogs-region": "'"$AWS_REGION"'",
-                    "awslogs-stream-prefix": "backend-api",
-                    "awslogs-datetime-format": "%Y-%m-%d %H:%M:%S",
-                    "awslogs-multiline-pattern": "^\\[\\d{4}-\\d{2}-\\d{2}"
-                  }
+          echo '[
+            {
+              "name": "'"${{ env.BACKEND_CONTAINER_NAME }}"'",
+              "image": "'"$IMAGE_URI_BACKEND"'",
+              "essential": true,
+              "portMappings": [
+                {
+                  "containerPort": 8080,
+                  "hostPort": 8080,
+                  "protocol": "tcp",
+                  "appProtocol": "http",
+                  "name": "backend-api"
                 }
-              },
-              {
-                "name": "${{ env.FRONTEND_CONTAINER_NAME }}",
-                "image": "'"$IMAGE_URI_FRONTEND"'",
-                "essential": false,
-                "portMappings": [
-                  {
-                    "containerPort": 80,
-                    "hostPort": "80,
-                    "protocol": "tcp",
-                    "appProtocol": "http",
-                    "name": "frontend"
-                  }
-                ]
+              ],
+              "environment": [
+                {
+                  "name": "MONGOURI",
+                  "value": "'"${{ secrets.MONGODB_HOST }}"'"
+                }
+              ],
+              "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                  "awslogs-group": "'"$LOG_GROUP"'",
+                  "awslogs-region": "'"$AWS_REGION"'",
+                  "awslogs-stream-prefix": "backend-api",
+                  "awslogs-datetime-format": "%Y-%m-%d %H:%M:%S",
+                  "awslogs-multiline-pattern": "^\\\\[\\\\d{4}-\\\\d{2}-\\\\d{2}"
+                }
               }
-            ]
-            EOF
+            },
+            {
+              "name": "'"${{ env.FRONTEND_CONTAINER_NAME }}"'",
+              "image": "'"$IMAGE_URI_FRONTEND"'",
+              "essential": true,
+              "portMappings": [
+                {
+                  "containerPort": 80,
+                  "hostPort": 80,
+                  "protocol": "tcp",
+                  "appProtocol": "http",
+                  "name": "frontend"
+                }
+              ]
+            }
+          ]' > task-definition.json
 
-            # Validate JSON trước khi sử dụng
-            jq empty task-definition.json || (echo "Invalid JSON in task-definition.json"; exit 1)
+            # Validate JSON
+            if ! jq empty task-definition.json; then
+              echo "::error::Invalid JSON in task-definition.json"
+              cat task-definition.json
+              exit 1
+            fi
 
             # Đăng ký task definition
             aws ecs register-task-definition \
@@ -221,7 +222,7 @@ jobs:
               --execution-role-arn ${{ env.ECS_EXECUTION_ROLE }} \
               --container-definitions file://task-definition.json
 
-            echo "is_new=true" >> $GITHUB_OUTPUT
+            echo "Task definition registered successfully"
           fi
 
       - name: Get VPC Configuration
