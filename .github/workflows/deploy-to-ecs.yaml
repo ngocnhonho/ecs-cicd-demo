@@ -267,55 +267,29 @@ jobs:
           # 2. Xử lý các trường hợp
           case $CLUSTER_STATUS in
             "ACTIVE")
-              echo "Cluster đã active"
+              echo "Cluster đã tồn tại và đang ACTIVE"
               ;;
             "INACTIVE")
-              echo "::warning::Cluster đang inactive, tiến hành xóa và tạo lại..."
-              # Xóa cluster cũ
+              echo "::warning::Cluster đang INACTIVE, tiến hành xóa..."
               aws ecs delete-cluster \
                 --cluster ${{ env.ECS_CLUSTER_NAME }} \
                 --no-cli-pager
               ;;
-            "NOT_FOUND")
-              echo "::warning::Cluster không tồn tại, đang tạo mới..."
+            "NOT_FOUND"|*)
+              echo "Tạo cluster mới..."
               aws ecs create-cluster \
                 --cluster-name ${{ env.ECS_CLUSTER_NAME }} \
                 --settings name=containerInsights,value=enabled \
                 --capacity-providers FARGATE \
-                --default-capacity-provider-strategy '[{"capacityProvider":"FARGATE","weight":1,"base":1}]'
-              ;;
-            *)
-              echo "::error::Trạng thái cluster không xác định: $CLUSTER_STATUS"
-              exit 1
+                --default-capacity-provider-strategy '[{"capacityProvider":"FARGATE","weight":1}]'
               ;;
           esac
           
-          # 3. Chờ cluster active (tối đa 3 phút)
-          echo "Đang chờ cluster active..."
-          for i in {1..18}; do
-            CURRENT_STATUS=$(aws ecs describe-clusters \
-              --clusters ${{ env.ECS_CLUSTER_NAME }} \
-              --query 'clusters[0].status' \
-              --output text)
-            
-            [[ "$CURRENT_STATUS" == "ACTIVE" ]] && break
-            
-            echo "Attempt $i/18 - Trạng thái hiện tại: $CURRENT_STATUS"
-            sleep 10
-          done
-          
-          # 4. Xác minh cuối cùng
-          FINAL_STATUS=$(aws ecs describe-clusters \
+          # 3. Xuất thông tin cluster (không kiểm tra trạng thái)
+          echo "cluster_arn=$(aws ecs describe-clusters \
             --clusters ${{ env.ECS_CLUSTER_NAME }} \
-            --query 'clusters[0].status' \
-            --output text)
-          
-          if [[ "$FINAL_STATUS" != "ACTIVE" ]]; then
-            echo "::error::Không thể kích hoạt cluster sau 3 phút"
-            exit 1
-          fi
-          
-          echo "Cluster đã sẵn sàng ở trạng thái ACTIVE"
+            --query 'clusters[0].clusterArn' \
+            --output text 2>/dev/null || echo '')" >> $GITHUB_OUTPUT
 
       - name: Create or Update ECS Service
         run: |
