@@ -132,11 +132,17 @@ jobs:
         id: ecs-task
         env:
           TASK_NAME: ${{ env.ECS_TASK_DEFINITION }}
-          IMAGE_URI_BACKEND: "${{vars.DOCKERHUB_USERNAME}}/${{env.BACKEND_IMAGE_NAME}}:${{ github.sha }}"
-          IMAGE_URI_FRONTEND: "${{vars.DOCKERHUB_USERNAME}}/${{env.FRONTEND_IMAGE_NAME}}:${{ github.sha }}"
+          IMAGE_URI_BACKEND: "${{vars.DOCKERHUB_USERNAME}}/${{env.BACKEND_IMAGE_NAME}}"
+          IMAGE_URI_FRONTEND: "${{vars.DOCKERHUB_USERNAME}}/${{env.FRONTEND_IMAGE_NAME}}"
           LOG_GROUP: "/ecs/${{ env.ECS_TASK_DEFINITION }}"
           AWS_REGION: ${{ env.AWS_REGION }}
         run: |
+          # Cài đặt jq nếu chưa có
+          if ! command -v jq &> /dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y jq
+          fi
+
           # Tạo CloudWatch Log Group nếu chưa tồn tại
           if ! aws logs describe-log-groups --log-group-name-prefix $LOG_GROUP --query 'logGroups[].logGroupName' --output text | grep -q $LOG_GROUP; then
             aws logs create-log-group --log-group-name $LOG_GROUP
@@ -151,12 +157,12 @@ jobs:
           else
             echo "Creating new task definition..."
             
-            # Tạo file JSON tạm để tránh lỗi parsing
-            cat <<EOF > task-definition.json
+            # Tạo file JSON với cú pháp heredoc chính xác
+            cat > task-definition.json <<'EOF'
             [
               {
                 "name": "${{ env.BACKEND_CONTAINER_NAME }}",
-                "image": "$IMAGE_URI_BACKEND",
+                "image": "'"$IMAGE_URI_BACKEND"'",
                 "essential": true,
                 "portMappings": [
                   {
@@ -170,23 +176,23 @@ jobs:
                 "environment": [
                   {
                     "name": "MONGOURI",
-                    "value": "${{ secrets.MONGODB_HOST }}"
+                    "value": "'"${{ secrets.MONGODB_HOST }}"'"
                   }
                 ],
                 "logConfiguration": {
                   "logDriver": "awslogs",
                   "options": {
-                    "awslogs-group": "$LOG_GROUP",
-                    "awslogs-region": "$AWS_REGION",
+                    "awslogs-group": "'"$LOG_GROUP"'",
+                    "awslogs-region": "'"$AWS_REGION"'",
                     "awslogs-stream-prefix": "backend-api",
                     "awslogs-datetime-format": "%Y-%m-%d %H:%M:%S",
-                    "awslogs-multiline-pattern": "^\\\\[\\\\d{4}-\\\\d{2}-\\\\d{2}"
+                    "awslogs-multiline-pattern": "^\\[\\d{4}-\\d{2}-\\d{2}"
                   }
                 }
               },
               {
                 "name": "${{ env.FRONTEND_CONTAINER_NAME }}",
-                "image": "$IMAGE_URI_FRONTEND",
+                "image": "'"$IMAGE_URI_FRONTEND"'",
                 "essential": false,
                 "portMappings": [
                   {
@@ -201,6 +207,9 @@ jobs:
             ]
             EOF
 
+            # Validate JSON trước khi sử dụng
+            jq empty task-definition.json || (echo "Invalid JSON in task-definition.json"; exit 1)
+
             # Đăng ký task definition
             aws ecs register-task-definition \
               --family $TASK_NAME \
@@ -213,20 +222,6 @@ jobs:
               --container-definitions file://task-definition.json
 
             echo "is_new=true" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create ECS Cluster if not exists
-        id: create-cluster
-        run: |
-          if ! aws ecs describe-clusters --clusters $ECS_CLUSTER --query 'clusters[0].clusterName' --output text 2>/dev/null; then
-            aws ecs create-cluster \
-              --cluster-name $ECS_CLUSTER \
-              --capacity-providers FARGATE FARGATE_SPOT \
-              --default-capacity-provider-strategy \
-                '[{"capacityProvider":"FARGATE","weight":1},{"capacityProvider":"FARGATE_SPOT","weight":1}]'
-            echo "Cluster created"
-          else
-            echo "Cluster already exists"
           fi
 
       - name: Get VPC Configuration
