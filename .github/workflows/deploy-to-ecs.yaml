@@ -15,8 +15,8 @@ env:
   ECS_TASK_DEFINITION: AppReact-Task-Difinition
   BACKEND_CONTAINER_NAME: nodebackend
   FRONTEND_CONTAINER_NAME: nodefrontend
-  ECS_SERVICE: AppReact-Test-Services
-  ECS_CLUSTER: AppReact-Test-Cluster
+  ECS_SERVICE_NAME: AppReact-Test-Services
+  ECS_CLUSTER_NAME: AppReact-Test-Cluster
   ECS_EXECUTION_ROLE: 'arn:aws:iam::590183692627:role/ecsTaskExecutionRole'
   CONTAINER_PORT: 8080
 jobs:
@@ -253,11 +253,74 @@ jobs:
           echo "Public Subnets: $PUBLIC_SUBNETS"
           echo "Default Security Group: $DEFAULT_SG"
 
+      - name: Ensure ECS Cluster Active
+        id: ensure-cluster
+        run: |
+          # 1. Kiểm tra trạng thái cluster
+          CLUSTER_INFO=$(aws ecs describe-clusters \
+            --clusters ${{ env.ECS_CLUSTER_NAME }} \
+            --query 'clusters[0]' \
+            --output json 2>/dev/null || echo '{"status":"NOT_FOUND"}')
+          
+          CLUSTER_STATUS=$(echo $CLUSTER_INFO | jq -r '.status')
+          
+          # 2. Xử lý các trường hợp
+          case $CLUSTER_STATUS in
+            "ACTIVE")
+              echo "Cluster đã active"
+              ;;
+            "INACTIVE")
+              echo "::warning::Cluster đang inactive, kích hoạt lại..."
+              aws ecs update-cluster-settings \
+                --cluster ${{ env.ECS_CLUSTER_NAME }} \
+                --settings name=containerInsights,value=enabled
+              ;;
+            "NOT_FOUND")
+              echo "::warning::Cluster không tồn tại, đang tạo mới..."
+              aws ecs create-cluster \
+                --cluster-name ${{ env.ECS_CLUSTER_NAME }} \
+                --settings name=containerInsights,value=enabled \
+                --capacity-providers FARGATE \
+                --default-capacity-provider-strategy '[{"capacityProvider":"FARGATE","weight":1,"base":1}]'
+              ;;
+            *)
+              echo "::error::Trạng thái cluster không xác định: $CLUSTER_STATUS"
+              exit 1
+              ;;
+          esac
+          
+          # 3. Chờ cluster active (tối đa 3 phút)
+          echo "Đang chờ cluster active..."
+          for i in {1..18}; do
+            CURRENT_STATUS=$(aws ecs describe-clusters \
+              --clusters ${{ env.ECS_CLUSTER_NAME }} \
+              --query 'clusters[0].status' \
+              --output text)
+            
+            [[ "$CURRENT_STATUS" == "ACTIVE" ]] && break
+            
+            echo "Attempt $i/18 - Trạng thái hiện tại: $CURRENT_STATUS"
+            sleep 10
+          done
+          
+          # 4. Xác minh cuối cùng
+          FINAL_STATUS=$(aws ecs describe-clusters \
+            --clusters ${{ env.ECS_CLUSTER_NAME }} \
+            --query 'clusters[0].status' \
+            --output text)
+          
+          if [[ "$FINAL_STATUS" != "ACTIVE" ]]; then
+            echo "::error::Không thể kích hoạt cluster sau 3 phút"
+            exit 1
+          fi
+          
+          echo "Cluster đã sẵn sàng ở trạng thái ACTIVE"
+
       - name: Create or Update ECS Service
         run: |
           aws ecs create-service \
-            --cluster $ECS_CLUSTER \
-            --service-name $ECS_SERVICE \
+            --cluster $ECS_CLUSTER_NAME \
+            --service-name $ECS_SERVICE_NAME  \
             --task-definition ${{ env.ECS_TASK_DEFINITION }} \
             --desired-count 1 \
             --launch-type FARGATE \
