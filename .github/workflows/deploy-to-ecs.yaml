@@ -270,10 +270,11 @@ jobs:
               echo "Cluster đã active"
               ;;
             "INACTIVE")
-              echo "::warning::Cluster đang inactive, kích hoạt lại..."
-              aws ecs update-cluster-settings \
+              echo "::warning::Cluster đang inactive, tiến hành xóa và tạo lại..."
+              # Xóa cluster cũ
+              aws ecs delete-cluster \
                 --cluster ${{ env.ECS_CLUSTER_NAME }} \
-                --settings name=containerInsights,value=enabled
+                --no-cli-pager
               ;;
             "NOT_FOUND")
               echo "::warning::Cluster không tồn tại, đang tạo mới..."
