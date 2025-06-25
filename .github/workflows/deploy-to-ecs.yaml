@@ -245,7 +245,7 @@ jobs:
           
           # Xuất biến cho các bước tiếp theo
           echo "vpc_id=$DEFAULT_VPC_ID" >> $GITHUB_OUTPUT
-          echo "subnets=$PUBLIC_SUBNETS" >> $GITHUB_OUTPUT
+          echo "subnets=${PUBLIC_SUBNETS}" >> $GITHUB_OUTPUT
           echo "security_group=$DEFAULT_SG" >> $GITHUB_OUTPUT
           
           # In thông tin để debug
